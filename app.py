@@ -12,10 +12,9 @@ from telegram import (
     ReplyKeyboardMarkup,
 )
 from telegram.ext import (
-    Updater,
     CommandHandler,
     MessageHandler,
-    Filters,
+    filters,
     CallbackQueryHandler,
     Dispatcher,
 )
@@ -98,11 +97,11 @@ def get_state(user_id):
 
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.contact, handle_contact))
+    dp.add_handler(MessageHandler(filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
     dp.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
-    dp.add_handler(MessageHandler(Filters.photo, handle_photo))
+    dp.add_handler(MessageHandler(filters.photo, handle_photo))
     return dp
 
 def start(update: Update, context):
