@@ -4,3 +4,4 @@ qrcode[pil]
 pyzbar
 Pillow
 flask
+gunicorn
