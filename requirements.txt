@@ -1,7 +1,10 @@
 python-dotenv
 python-telegram-bot
 qrcode[pil]
-pyzbar
+qreader
+opencv-python-headless
+numpy
 Pillow
 flask
 gunicorn
+onnxruntime

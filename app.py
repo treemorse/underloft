@@ -20,7 +20,9 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 from qrcode import QRCode
-from pyzbar.pyzbar import decode
+from qreader import QReader
+import cv2
+import numpy as np
 from PIL import Image
 import dotenv
 
@@ -198,12 +200,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         img = Image.open(bio)
-        decoded = decode(img)
-        if not decoded:
+        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        
+        qreader = QReader()
+        
+        data = qreader.detect_and_decode(image=img_cv)
+        if not data:
             await update.message.reply_text("Перефоткай")
             return
         
-        data = decoded[0].data.decode()
+        data = data[0]
+
         if ":" not in data:
             await update.message.reply_text("Левый код")
             return
