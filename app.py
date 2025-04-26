@@ -20,7 +20,6 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 from qrcode import QRCode
-from qreader import QReader
 import cv2
 import numpy as np
 from PIL import Image
@@ -199,18 +198,19 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bio.seek(0)
     
     try:
+        # Convert image to OpenCV format
         img = Image.open(bio)
         img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         
-        qreader = QReader()
+        # Use OpenCV's built-in QR code detector
+        detector = cv2.QRCodeDetector()
+        data, points, _ = detector.detectAndDecode(img_cv)
         
-        data = qreader.detect_and_decode(image=img_cv)
         if not data:
             await update.message.reply_text("Перефоткай")
             return
         
-        data = data[0]
-
+        # Rest of the validation logic remains the same
         if ":" not in data:
             await update.message.reply_text("Левый код")
             return
