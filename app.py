@@ -3,7 +3,7 @@ import csv
 import time
 import hashlib
 from io import BytesIO
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -12,18 +12,19 @@ from telegram import (
     ReplyKeyboardMarkup,
 )
 from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
+    Updater,
     CommandHandler,
     MessageHandler,
-    filters,
+    Filters,
     CallbackQueryHandler,
+    Dispatcher,
 )
 from qrcode import QRCode
 import cv2
 import numpy as np
 from PIL import Image
 import dotenv
+
 
 dotenv.load_dotenv()
 
@@ -95,14 +96,23 @@ def get_state(user_id):
                 return row[1]
     return None
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def setup_dispatcher(dp):
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(MessageHandler(Filters.contact, handle_contact))
+    dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
+    dp.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
+    dp.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
+    dp.add_handler(MessageHandler(Filters.photo, handle_photo))
+    return dp
+
+def start(update: Update, context):
     user = update.effective_user
     existing_user = get_user(user.id)
     
     if not existing_user:
         keyboard = [[KeyboardButton("Share Phone", request_contact=True)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-        await update.message.reply_text(
+        update.message.reply_text(
             "Please register with your phone number:",
             reply_markup=reply_markup
         )
@@ -110,20 +120,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if existing_user["is_admin"] == "True":
         keyboard = [[InlineKeyboardButton("Начать проверку", callback_data="start_check")]]
-        await update.message.reply_text(
+        update.message.reply_text(
             "Поздравляю вы контролер",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         channel_url = f"https://t.me/{CHANNEL_NAME}"
         keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
-        await update.message.reply_text(
+        update.message.reply_text(
             f"Подпишись на [канал]({channel_url}), чтобы получить билет",
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_contact(update: Update, context):
     user = update.effective_user
     phone = update.message.contact.phone_number
     
@@ -140,16 +150,16 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         writer = csv.DictWriter(f, fieldnames=new_user.keys())
         writer.writerow(new_user)
     
-    await update.message.reply_text("Регистрация успешна!")
-    await start(update, context)
+    update.message.reply_text("Регистрация успешна!")
+    start(update, context)
 
-async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def check_subscription(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     user_id = query.from_user.id
     try:
-        member = await context.bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
+        member = context.bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             qr = QRCode()
             qr_data = f"{user_id}:{hashlib.sha256(SECURITY_CODE.encode()).hexdigest()}"
@@ -161,7 +171,7 @@ async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
             img.save(bio, "PNG")
             bio.seek(0)
             
-            await context.bot.send_photo(
+            context.bot.send_photo(
                 chat_id=user_id,
                 photo=bio,
                 caption="Это твой билет на тусовку, сохрани, чтобы не потерять"
@@ -173,11 +183,11 @@ async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             update_user(user_id, {"has_ticket": "True"})
         else:
-            await query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
+            query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
     except Exception as e:
-        await query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
+        query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
 
-async def start_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_check(update: Update, context):
     query = update.callback_query
     await query.answer()
     set_state(query.from_user.id, "checking")
@@ -187,37 +197,34 @@ async def start_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def handle_photo(update: Update, context):
     user_id = update.message.from_user.id
     if get_state(user_id) != "checking":
         return
     
-    photo_file = await update.message.photo[-1].get_file()
+    photo_file = update.message.photo[-1].get_file()
     bio = BytesIO()
-    await photo_file.download_to_memory(bio)
+    photo_file.download_to_memory(bio)
     bio.seek(0)
     
     try:
-        # Convert image to OpenCV format
         img = Image.open(bio)
         img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         
-        # Use OpenCV's built-in QR code detector
         detector = cv2.QRCodeDetector()
         data, points, _ = detector.detectAndDecode(img_cv)
         
         if not data:
-            await update.message.reply_text("Перефоткай")
+            update.message.reply_text("Перефоткай")
             return
         
-        # Rest of the validation logic remains the same
         if ":" not in data:
-            await update.message.reply_text("Левый код")
+            update.message.reply_text("Левый код")
             return
         
         uid, code = data.split(":")
         if code != hashlib.sha256(SECURITY_CODE.encode()).hexdigest():
-            await update.message.reply_text("Левый код")
+            update.message.reply_text("Левый код")
             return
         
         with open(ATTENDANCE_CSV, "r", encoding="utf-8") as f:
@@ -225,20 +232,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             next(reader)
             for row in reader:
                 if row[1] == uid:
-                    await update.message.reply_text("Битый код")
+                    update.message.reply_text("Битый код")
                     return
         
         with open(ATTENDANCE_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([int(time.time()), uid, get_user(int(uid))["phone"]])
         
-        await update.message.reply_text("Этот чист, пропускай")
+        update.message.reply_text("Этот чист, пропускай")
     except Exception as e:
-        await update.message.reply_text("Ошибка обработки")
+        update.message.reply_text("Ошибка обработки")
 
-async def stop_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def stop_check(update: Update, context):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     with open(ATTENDANCE_CSV, "r", encoding="utf-8") as f:
         count = sum(1 for _ in csv.reader(f)) - 1
@@ -250,26 +257,20 @@ async def stop_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         noun = "билетов"
     
     keyboard = [[InlineKeyboardButton("Продолжить проверку", callback_data="start_check")]]
-    await query.edit_message_text(
+    query.edit_message_text(
         f"Ты проверил {count} {noun}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     set_state(query.from_user.id, None)
 
 @app.post("/webhook")
-async def webhook():
-    application = ApplicationBuilder().token(TOKEN).build()
+def webhook():
+    dp = Dispatcher(None, workers=0)
+    dp = setup_dispatcher(dp)
     
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
-    application.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
-    application.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
-    application.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    
-    update = Update.de_json(await request.get_json(), application.bot)
-    await application.process_update(update)
-    return "OK"
+    update = Update.de_json(request.get_json(), dp.bot)
+    dp.process_update(update)
+    return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=1612)
