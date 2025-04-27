@@ -89,7 +89,7 @@ def setup_dispatcher(dp):
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
-    dp.add_handler(MessageHandler(filters.Text("Сколько билетов было проверено"), show_ticket_count))
+    dp.add_handler(MessageHandler(filters.Filters.text(["Сколько билетов было проверено"]), show_ticket_count))
     return dp
 
 def is_admin(user_id):
