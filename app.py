@@ -109,11 +109,11 @@ def get_state(user_id):
 
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.CONTACT, handle_contact))
+    dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
     dp.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
-    dp.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
     return dp
 
 def start(update: Update, context: CallbackContext):
@@ -200,12 +200,12 @@ def check_subscription(update: Update, context: CallbackContext):
             session.close()
         else:
             query.answer(
-                "Мы тебя не нашли(, попробуй еще раз", 
+                text="Мы тебя не нашли(, попробуй еще раз", 
                 show_alert=True
             )
     except Exception as e:
         query.answer(
-            "Мы тебя не нашли(, попробуй еще раз", 
+            text="Мы тебя не нашли(, попробуй еще раз", 
             show_alert=True
         )
 
