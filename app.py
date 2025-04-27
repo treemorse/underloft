@@ -10,6 +10,7 @@ from telegram import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    Bot
 )
 from telegram.ext import (
     CommandHandler,
@@ -17,6 +18,7 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
     Dispatcher,
+    CallbackContext
 )
 from qrcode import QRCode
 import cv2
@@ -24,13 +26,13 @@ import numpy as np
 from PIL import Image
 import dotenv
 
-
 dotenv.load_dotenv()
 
 app = Flask(__name__)
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 SECURITY_CODE = os.getenv("SECURITY_CODE")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME")
+bot = Bot(token=TOKEN)
 
 USERS_CSV = "users.csv"
 REGISTRATIONS_CSV = "registrations.csv"
@@ -60,13 +62,14 @@ def update_user(user_id, updates):
     rows = []
     with open(USERS_CSV, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            if int(row["user_id"]) == user_id:
-                row.update(updates)
-            rows.append(row)
+        rows = list(reader)
+    
+    for row in rows:
+        if int(row["user_id"]) == user_id:
+            row.update(updates)
     
     with open(USERS_CSV, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=reader.fieldnames)
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
         writer.writeheader()
         writer.writerows(rows)
 
@@ -97,14 +100,14 @@ def get_state(user_id):
 
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(filters.contact, handle_contact))
+    dp.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
     dp.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
-    dp.add_handler(MessageHandler(filters.photo, handle_photo))
+    dp.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     return dp
 
-def start(update: Update, context):
+def start(update: Update, context: CallbackContext):
     user = update.effective_user
     existing_user = get_user(user.id)
     
@@ -132,7 +135,7 @@ def start(update: Update, context):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-def handle_contact(update: Update, context):
+def handle_contact(update: Update, context: CallbackContext):
     user = update.effective_user
     phone = update.message.contact.phone_number
     
@@ -152,13 +155,13 @@ def handle_contact(update: Update, context):
     update.message.reply_text("Регистрация успешна!")
     start(update, context)
 
-def check_subscription(update: Update, context):
+def check_subscription(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     
     user_id = query.from_user.id
     try:
-        member = context.bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
+        member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             qr = QRCode()
             qr_data = f"{user_id}:{hashlib.sha256(SECURITY_CODE.encode()).hexdigest()}"
@@ -170,7 +173,7 @@ def check_subscription(update: Update, context):
             img.save(bio, "PNG")
             bio.seek(0)
             
-            context.bot.send_photo(
+            bot.send_photo(
                 chat_id=user_id,
                 photo=bio,
                 caption="Это твой билет на тусовку, сохрани, чтобы не потерять"
@@ -186,27 +189,27 @@ def check_subscription(update: Update, context):
     except Exception as e:
         query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
 
-async def start_check(update: Update, context):
+def start_check(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     set_state(query.from_user.id, "checking")
     keyboard = [[InlineKeyboardButton("Остановить проверку", callback_data="stop_check")]]
-    await query.edit_message_text(
+    query.edit_message_text(
         "Режим проверки активирован",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-def handle_photo(update: Update, context):
+def handle_photo(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     if get_state(user_id) != "checking":
         return
     
-    photo_file = update.message.photo[-1].get_file()
-    bio = BytesIO()
-    photo_file.download_to_memory(bio)
-    bio.seek(0)
-    
     try:
+        photo_file = bot.get_file(update.message.photo[-1].file_id)
+        bio = BytesIO()
+        photo_file.download(out=bio)
+        bio.seek(0)
+        
         img = Image.open(bio)
         img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         
@@ -240,9 +243,9 @@ def handle_photo(update: Update, context):
         
         update.message.reply_text("Этот чист, пропускай")
     except Exception as e:
-        update.message.reply_text("Ошибка обработки")
+        update.message.reply_text(f"Ошибка обработки: {str(e)}")
 
-def stop_check(update: Update, context):
+def stop_check(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     
@@ -264,10 +267,10 @@ def stop_check(update: Update, context):
 
 @app.post("/webhook")
 def webhook():
-    dp = Dispatcher(None, workers=0)
+    dp = Dispatcher(bot=bot, update_queue=None)
     dp = setup_dispatcher(dp)
     
-    update = Update.de_json(request.get_json(), dp.bot)
+    update = Update.de_json(request.get_json(), bot)
     dp.process_update(update)
     return jsonify({"status": "ok"})
 
