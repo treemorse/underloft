@@ -65,12 +65,6 @@ class Attendance(Base):
     user_id = Column(Integer)
     phone = Column(String)
 
-class State(Base):
-    __tablename__ = 'states'
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True)
-    state = Column(String)
-
 Base.metadata.create_all(engine)
 
 bot = Bot(token=TOKEN)
@@ -90,31 +84,17 @@ def update_user(user_id, updates):
         session.commit()
     session.close()
 
-def set_state(user_id, state):
-    session = Session()
-    existing = session.query(State).filter_by(user_id=user_id).first()
-    if existing:
-        existing.state = state
-    else:
-        new_state = State(user_id=user_id, state=state)
-        session.add(new_state)
-    session.commit()
-    session.close()
-
-def get_state(user_id):
-    session = Session()
-    state = session.query(State).filter_by(user_id=user_id).first()
-    session.close()
-    return state.state if state else None
-
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
-    dp.add_handler(CallbackQueryHandler(start_check, pattern="^start_check$"))
-    dp.add_handler(CallbackQueryHandler(stop_check, pattern="^stop_check$"))
-    dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
+    dp.add_handler(MessageHandler(filters.Filters.photo & filters.User(user_id=is_admin), handle_photo))
+    dp.add_handler(MessageHandler(filters.Text("Сколько билетов было проверено"), show_ticket_count))
     return dp
+
+def is_admin(user_id):
+    user = get_user(user_id)
+    return user.is_admin if user else False
 
 def start(update: Update, context: CallbackContext):
     user = update.effective_user
@@ -130,10 +110,13 @@ def start(update: Update, context: CallbackContext):
         return
     
     if existing_user.is_admin:
-        keyboard = [[InlineKeyboardButton("Начать проверку", callback_data="start_check")]]
+        keyboard = [[KeyboardButton("Сколько билетов было проверено")]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         update.message.reply_text(
-            "Поздравляю ты контролер",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "Поздравляю ты контролер\n\n"
+            "Теперь можешь проверять QR-коды, просто отправляя их фото.\n"
+            "Используй кнопку ниже чтобы посмотреть статистику:",
+            reply_markup=reply_markup
         )
     else:
         channel_url = f"https://t.me/{CHANNEL_NAME}"
@@ -161,7 +144,6 @@ def handle_contact(update: Update, context: CallbackContext):
     session.commit()
     session.close()
     
-    # Remove the contact keyboard
     update.message.reply_text(
         "Регистрация успешна!",
         reply_markup=ReplyKeyboardRemove()
@@ -213,23 +195,8 @@ def check_subscription(update: Update, context: CallbackContext):
             show_alert=True
         )
 
-def start_check(update: Update, context: CallbackContext):
-    query = update.callback_query
-    query.answer()
-    set_state(query.from_user.id, "checking")
-    
-    # Send new message with stop button
-    keyboard = [[InlineKeyboardButton("Остановить проверку", callback_data="stop_check")]]
-    context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text="Режим проверки активирован",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
 def handle_photo(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
-    if get_state(user_id) != "checking":
-        return
     
     try:
         photo_file = bot.get_file(update.message.photo[-1].file_id)
@@ -281,10 +248,7 @@ def handle_photo(update: Update, context: CallbackContext):
     except Exception as e:
         update.message.reply_text(f"Ошибка обработки: {str(e)}")
 
-def stop_check(update: Update, context: CallbackContext):
-    query = update.callback_query
-    query.answer()
-    
+def show_ticket_count(update: Update, context: CallbackContext):
     session = Session()
     count = session.query(Attendance).count()
     session.close()
@@ -295,14 +259,7 @@ def stop_check(update: Update, context: CallbackContext):
     elif count % 10 != 1 or count % 100 == 11:
         noun = "билетов"
     
-    # Send new message with continue button
-    keyboard = [[InlineKeyboardButton("Продолжить проверку", callback_data="start_check")]]
-    context.bot.send_message(
-        chat_id=query.message.chat_id,
-        text=f"Ты проверил {count} {noun}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    set_state(query.from_user.id, None)
+    update.message.reply_text(f"Всего проверено: {count} {noun}")
 
 @app.post("/webhook")
 def webhook():
