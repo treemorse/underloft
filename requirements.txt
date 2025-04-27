@@ -7,3 +7,5 @@ Pillow
 flask
 gunicorn
 onnxruntime
+sqlalchemy
+psycopg2-binary
