@@ -88,7 +88,7 @@ def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
-    dp.add_handler(MessageHandler(filters.Filters.photo & filters.User(user_id=is_admin), handle_photo))
+    dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
     dp.add_handler(MessageHandler(filters.Text("Сколько билетов было проверено"), show_ticket_count))
     return dp
 
@@ -197,6 +197,8 @@ def check_subscription(update: Update, context: CallbackContext):
 
 def handle_photo(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
+    if not is_admin(user_id):
+        return
     
     try:
         photo_file = bot.get_file(update.message.photo[-1].file_id)
