@@ -185,9 +185,15 @@ def check_subscription(update: Update, context: CallbackContext):
             
             update_user(user_id, {"has_ticket": "True"})
         else:
-            query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
+            query.answer(
+                "Мы тебя не нашли(, попробуй еще раз", 
+                show_alert=True
+            )
     except Exception as e:
-        query.edit_message_text("Мы тебя не нашли(, попробуй еще раз")
+        query.answer(
+                "Мы тебя не нашли(, попробуй еще раз", 
+                show_alert=True
+            )
 
 def start_check(update: Update, context: CallbackContext):
     query = update.callback_query
