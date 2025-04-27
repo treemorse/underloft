@@ -8,6 +8,7 @@ from telegram import (
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     Bot
 )
 from telegram.ext import (
@@ -70,7 +71,6 @@ class State(Base):
     user_id = Column(Integer, unique=True)
     state = Column(String)
 
-# Create tables if they don't exist
 Base.metadata.create_all(engine)
 
 bot = Bot(token=TOKEN)
@@ -132,7 +132,7 @@ def start(update: Update, context: CallbackContext):
     if existing_user.is_admin:
         keyboard = [[InlineKeyboardButton("Начать проверку", callback_data="start_check")]]
         update.message.reply_text(
-            "Поздравляю вы контролер",
+            "Поздравляю ты контролер",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
@@ -161,7 +161,11 @@ def handle_contact(update: Update, context: CallbackContext):
     session.commit()
     session.close()
     
-    update.message.reply_text("Регистрация успешна!")
+    # Remove the contact keyboard
+    update.message.reply_text(
+        "Регистрация успешна!",
+        reply_markup=ReplyKeyboardRemove()
+    )
     start(update, context)
 
 def check_subscription(update: Update, context: CallbackContext):
@@ -200,12 +204,12 @@ def check_subscription(update: Update, context: CallbackContext):
             session.close()
         else:
             query.answer(
-                text="Мы тебя не нашли(, попробуй еще раз", 
+                "Мы тебя не нашли(, попробуй еще раз", 
                 show_alert=True
             )
     except Exception as e:
         query.answer(
-            text="Мы тебя не нашли(, попробуй еще раз", 
+            "Мы тебя не нашли(, попробуй еще раз", 
             show_alert=True
         )
 
@@ -213,9 +217,12 @@ def start_check(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
     set_state(query.from_user.id, "checking")
+    
+    # Send new message with stop button
     keyboard = [[InlineKeyboardButton("Остановить проверку", callback_data="stop_check")]]
-    query.edit_message_text(
-        "Режим проверки активирован",
+    context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="Режим проверки активирован",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -288,9 +295,11 @@ def stop_check(update: Update, context: CallbackContext):
     elif count % 10 != 1 or count % 100 == 11:
         noun = "билетов"
     
+    # Send new message with continue button
     keyboard = [[InlineKeyboardButton("Продолжить проверку", callback_data="start_check")]]
-    query.edit_message_text(
-        f"Ты проверил {count} {noun}",
+    context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"Ты проверил {count} {noun}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     set_state(query.from_user.id, None)
