@@ -90,7 +90,7 @@ def setup_dispatcher(dp):
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
-    dp.add_handler(MessageHandler(filters.Filters.text(["Сколько билетов было проверено"]), show_ticket_count))
+    dp.add_handler(MessageHandler(filters.Filters.text(["Сколько проверенных билетов", "Сколько регистраций"]), show_ticket_count))
     return dp
 
 def is_admin(user_id):
@@ -302,17 +302,22 @@ def handle_photo(update: Update, context: CallbackContext):
         update.message.reply_text(f"Ошибка обработки: {str(e)}")
 
 def show_ticket_count(update: Update, context: CallbackContext):
+    text = update.message.text
     session = Session()
-    count = session.query(Attendance).count()
+    if text == "Сколько проверенных билетов":
+        count = session.query(Attendance).count()
+        noun = "билет"
+    else:
+        count = session.query(Registration).count()
+        noun = "юзер"
     session.close()
     
-    noun = "билет"
     if 2 <= count % 10 <= 4 and (count % 100 < 10 or count % 100 >= 20):
-        noun = "билета"
+        noun += "а"
     elif count % 10 != 1 or count % 100 == 11:
-        noun = "билетов"
+        noun += "ов"
     
-    update.message.reply_text(f"Всего проверено: {count} {noun}")
+    update.message.reply_text(f"Всего: {count} {noun}")
 
 @app.post("/webhook")
 def webhook():
