@@ -24,7 +24,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import dotenv
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 
@@ -86,6 +86,7 @@ def update_user(user_id, updates):
 
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("promote", promote_user))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
@@ -127,13 +128,63 @@ def start(update: Update, context: CallbackContext):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+def promote_user(update: Update, context: CallbackContext):
+    try:
+        sender_id = update.effective_user.id
+        sender = get_user(sender_id)
+        if not sender or not sender.is_admin:
+            update.message.reply_text("У вас нет прав для выполнения этой команды")
+            return
+
+        if not context.args or len(context.args) < 1:
+            update.message.reply_text("Использование: /promote @username")
+            return
+
+        target_tag = context.args[0].lstrip('@')
+        if not target_tag:
+            update.message.reply_text("Укажи телеграм-тег пользователя (например: /promote @username)")
+            return
+
+        session = Session()
+        target_user = session.query(User).filter(
+            func.lower(User.telegram_tag) == func.lower(target_tag)
+        ).first()
+
+        if not target_user:
+            update.message.reply_text("Пользователь не найден")
+            session.close()
+            return
+
+        if target_user.is_admin:
+            update.message.reply_text("Этот пользователь уже администратор")
+            session.close()
+            return
+
+        target_user.is_admin = True
+        session.commit()
+        update.message.reply_text(f"Пользователь @{target_user.telegram_tag} теперь администратор")
+        
+        try:
+            context.bot.send_message(
+                chat_id=int(target_user.user_id),
+                text="Тебя повысили! Отправь /start чтобы обновить функционал."
+            )
+        except Exception as e:
+            pass
+
+    except Exception as e:
+        update.message.reply_text("Ошибка выполнения команды")
+    finally:
+        if 'session' in locals():
+            session.close()
+
 def handle_contact(update: Update, context: CallbackContext):
     user = update.effective_user
     phone = update.message.contact.phone_number
     
     session = Session()
     new_user = User(
-        user_id=str(user.id),  # Store as string
+        user_id=str(user.id),
         phone=phone,
         telegram_tag=user.username or user.full_name,
         has_ticket=False,
