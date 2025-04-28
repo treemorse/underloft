@@ -111,12 +111,12 @@ def start(update: Update, context: CallbackContext):
         return
     
     if existing_user.is_admin:
-        keyboard = [[KeyboardButton("Сколько билетов было проверено")]]
+        keyboard = [[KeyboardButton("Сколько проверенных билетов")], [KeyboardButton("Сколько регистраций")]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         update.message.reply_text(
             "Поздравляю ты контролер\n\n"
             "Теперь можешь проверять QR-коды, просто отправляя их фото.\n"
-            "Используй кнопку ниже чтобы посмотреть статистику:",
+            "Используй кнопки ниже чтобы посмотреть статистику:",
             reply_markup=reply_markup
         )
     else:
