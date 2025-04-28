@@ -308,7 +308,7 @@ def show_ticket_count(update: Update, context: CallbackContext):
         count = session.query(Attendance).count()
         noun = "билет"
     else:
-        count = session.query(Registration).count()
+        count = session.query(User).count()
         noun = "юзер"
     session.close()
     
