@@ -36,7 +36,6 @@ SECURITY_CODE = os.getenv("SECURITY_CODE")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Database setup
 engine = create_engine(DATABASE_URL)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
@@ -44,7 +43,7 @@ Session = sessionmaker(bind=engine)
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    user_id = Column(String, unique=True)  # String type
+    user_id = Column(String, unique=True)
     phone = Column(String)
     telegram_tag = Column(String)
     has_ticket = Column(Boolean, default=False)
@@ -55,14 +54,14 @@ class Registration(Base):
     __tablename__ = 'registrations'
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(String)  # Changed to String
+    user_id = Column(String)
     phone = Column(String)
 
 class Attendance(Base):
     __tablename__ = 'attendance'
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(String)  # Changed to String
+    user_id = Column(String)
     phone = Column(String)
 
 Base.metadata.create_all(engine)
@@ -71,13 +70,13 @@ bot = Bot(token=TOKEN)
 
 def get_user(user_id):
     session = Session()
-    user = session.query(User).filter_by(user_id=str(user_id)).first()  # Convert to string
+    user = session.query(User).filter_by(user_id=str(user_id)).first()
     session.close()
     return user
 
 def update_user(user_id, updates):
     session = Session()
-    user = session.query(User).filter_by(user_id=str(user_id)).first()  # Convert to string
+    user = session.query(User).filter_by(user_id=str(user_id)).first()
     if user:
         for key, value in updates.items():
             setattr(user, key, value)
@@ -87,6 +86,7 @@ def update_user(user_id, updates):
 def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("promote", promote_user))
+    dp.add_handler(CommandHandler("demote", demote_user))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
@@ -94,12 +94,12 @@ def setup_dispatcher(dp):
     return dp
 
 def is_admin(user_id):
-    user = get_user(user_id)  # Uses string conversion internally
+    user = get_user(user_id)
     return user.is_admin if user else False
 
 def start(update: Update, context: CallbackContext):
     user = update.effective_user
-    existing_user = get_user(user.id)  # Converted to string internally
+    existing_user = get_user(user.id)
     
     if not existing_user:
         keyboard = [[KeyboardButton("Поделиться Номером", request_contact=True)]]
@@ -127,6 +127,56 @@ def start(update: Update, context: CallbackContext):
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+def demote_user(update: Update, context: CallbackContext):
+    try:
+        sender_id = update.effective_user.id
+        sender = get_user(sender_id)
+        if not sender or not sender.is_admin:
+            update.message.reply_text("У вас нет прав для выполнения этой команды")
+            return
+
+        if not context.args or len(context.args) < 1:
+            update.message.reply_text("Использование: /demote @username")
+            return
+
+        target_tag = context.args[0].lstrip('@')
+        if not target_tag:
+            update.message.reply_text("Укажи телеграм-тег пользователя (например: /demote @username)")
+            return
+
+        session = Session()
+        target_user = session.query(User).filter(
+            func.lower(User.telegram_tag) == func.lower(target_tag)
+        ).first()
+
+        if not target_user:
+            update.message.reply_text("Пользователь не найден")
+            session.close()
+            return
+
+        if not target_user.is_admin:
+            update.message.reply_text("Этот пользователь не администратор")
+            session.close()
+            return
+
+        target_user.is_admin = False
+        session.commit()
+        update.message.reply_text(f"Пользователь @{target_user.telegram_tag} теперь лох")
+        
+        try:
+            context.bot.send_message(
+                chat_id=int(target_user.user_id),
+                text="Тебя уволили! Отправь /start чтобы обновить функционал."
+            )
+        except Exception as e:
+            pass
+
+    except Exception as e:
+        update.message.reply_text("Ошибка выполнения команды")
+    finally:
+        if 'session' in locals():
+            session.close()
 
 def promote_user(update: Update, context: CallbackContext):
     try:
@@ -226,9 +276,9 @@ def check_subscription(update: Update, context: CallbackContext):
             )
             
             session = Session()
-            user = session.query(User).filter_by(user_id=str(user_id)).first()  # String filter
+            user = session.query(User).filter_by(user_id=str(user_id)).first()
             registration = Registration(
-                user_id=str(user_id),  # Store as string
+                user_id=str(user_id),
                 phone=user.phone
             )
             session.add(registration)
@@ -277,20 +327,20 @@ def handle_photo(update: Update, context: CallbackContext):
             return
         
         session = Session()
-        exists = session.query(Attendance).filter_by(user_id=uid).first()  # Direct string match
+        exists = session.query(Attendance).filter_by(user_id=uid).first()
         if exists:
             update.message.reply_text("Битый код")
             session.close()
             return
         
-        user = session.query(User).filter_by(user_id=uid).first()  # Direct string match
+        user = session.query(User).filter_by(user_id=uid).first()
         if not user:
             update.message.reply_text("Левый код")
             session.close()
             return
         
         attendance = Attendance(
-            user_id=uid,  # Already string from QR
+            user_id=uid,
             phone=user.phone
         )
         session.add(attendance)
@@ -330,3 +380,4 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=1612)
+
