@@ -120,6 +120,10 @@ def start(update: Update, context: CallbackContext):
             reply_markup=reply_markup
         )
     else:
+        update.message.reply_text(
+            "Ты больше не контролер. Доступ к админским функциям закрыт.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         channel_url = f"https://t.me/{CHANNEL_NAME}"
         keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
         update.message.reply_text(
