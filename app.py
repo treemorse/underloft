@@ -121,7 +121,7 @@ def start(update: Update, context: CallbackContext):
         )
     else:
         channel_url = f"https://t.me/{CHANNEL_NAME}"
-        keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
+        keyboard = [[ReplyKeyboardRemove()], [InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
         update.message.reply_text(
             f"Подпишись на [канал]({channel_url}), чтобы получить билет",
             parse_mode="Markdown",
