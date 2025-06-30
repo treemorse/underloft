@@ -388,7 +388,7 @@ def generate_ticket_image(telegram_tag: str, qr_img: Image.Image):
     
     text_width = draw.textlength(tag_text, font=font)
     draw.text(
-        ((1080 - text_width) // 2, 950),
+        ((1080 - text_width) // 2, 940),
         tag_text,
         fill="white",
         font=font,
@@ -400,7 +400,7 @@ def generate_ticket_image(telegram_tag: str, qr_img: Image.Image):
     qr_img = qr_img.resize((qr_size, qr_size))
     box = (20, 20, 760, 760)
     qr_img_final = qr_img.crop(box)
-    qr_position = ((1080 - qr_size) // 2, 1050)
+    qr_position = ((1100 - qr_size) // 2, 1070)
     
     ticket.paste(qr_img_final, qr_position)
     
