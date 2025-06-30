@@ -9,5 +9,3 @@ gunicorn
 onnxruntime
 sqlalchemy
 psycopg2-binary
-standard-imghdr
-urllib3
