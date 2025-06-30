@@ -22,7 +22,7 @@ from telegram.ext import (
 from qrcode import QRCode
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 import dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, func
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -263,10 +263,13 @@ def check_subscription(update: Update, context: CallbackContext):
             qr_data = f"{user_id}:{hashlib.sha256(SECURITY_CODE.encode()).hexdigest()}"
             qr.add_data(qr_data)
             qr.make()
-            
-            img = qr.make_image(fill_color="black", back_color="white")
+
+            base_qr = qr.make_image(fill_color="black", back_color="white")
+            qr_img = base_qr.convert("RGB")
+            telegram_tag = query.from_user.username
+            ticket_img = generate_ticket_image(telegram_tag, qr_img)
             bio = BytesIO()
-            img.save(bio, "PNG")
+            ticket_img.save(bio, "PNG")
             bio.seek(0)
             
             bot.send_photo(
@@ -368,6 +371,38 @@ def show_ticket_count(update: Update, context: CallbackContext):
         noun += "ов"
     
     update.message.reply_text(f"Всего: {count} {noun}")
+
+def generate_ticket_image(telegram_tag: str, qr_img: Image.Image):
+    try:
+        ticket = Image.open("img/ticket.png")
+    except FileNotFoundError:
+        ticket = Image.new('RGB', (1080, 1920), (255, 255, 255))
+    
+    draw = ImageDraw.Draw(ticket)
+    
+    tag_text = f"@{telegram_tag}" if telegram_tag else ""
+    try:
+        font = ImageFont.truetype("fonts/tag.ttf", 70)
+    except IOError:
+        font = ImageFont.load_default()
+    
+    text_width = draw.textlength(tag_text, font=font)
+    draw.text(
+        ((1080 - text_width) // 2, 1100),
+        tag_text,
+        fill="white",
+        font=font,
+        stroke_width=2,
+        stroke_fill="black"
+    )
+
+    qr_size = 600
+    qr_img = qr_img.resize((qr_size, qr_size))
+    qr_position = ((1080 - qr_size) // 2, 1250)
+    
+    ticket.paste(qr_img, qr_position)
+    
+    return ticket
 
 @app.post("/webhook")
 def webhook():
