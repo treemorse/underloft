@@ -162,7 +162,7 @@ def demote_user(update: Update, context: CallbackContext):
 
         target_user.is_admin = False
         session.commit()
-        update.message.reply_text(f"Пользователь @{target_user.telegram_tag} теперь лох")
+        update.message.reply_text(f"Пользователь @{target_user.telegram_tag} больше не админ")
         
         try:
             context.bot.send_message(
