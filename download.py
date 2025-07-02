@@ -23,12 +23,12 @@ conn = psycopg2.connect(
     port=db_port
 )
 
-output_filename = 'data/attended.csv'
+output_filename = 'data/mix_reg.csv'
 
 try:
     with conn.cursor() as cursor, open(output_filename, 'w') as csv_file:
         cursor.copy_expert(
-            "COPY (SELECT u.telegram_tag FROM attendance a LEFT JOIN users u ON u.user_id = a.user_id) TO STDOUT WITH CSV HEADER",
+            "COPY (SELECT * FROM users) TO STDOUT WITH CSV HEADER",
             csv_file
         )
     print(f"Successfully exported to {output_filename}")

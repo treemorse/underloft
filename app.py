@@ -396,9 +396,9 @@ def generate_ticket_image(telegram_tag: str, qr_img: Image.Image):
         stroke_fill="black"
     )
 
-    qr_size = 800
+    qr_size = 780
     qr_img = qr_img.resize((qr_size, qr_size))
-    box = (20, 20, 780, 780)
+    box = (20, 20, 760, 760)
     qr_img_final = qr_img.crop(box)
     qr_position = ((1130 - qr_size) // 2, 1075)
     
