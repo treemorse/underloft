@@ -23,7 +23,7 @@ conn = psycopg2.connect(
     port=db_port
 )
 
-output_filename = 'data/mix_reg.csv'
+output_filename = 'data/users.csv'
 
 try:
     with conn.cursor() as cursor, open(output_filename, 'w') as csv_file:

@@ -39,16 +39,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
-
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
     user_id = Column(String, unique=True)
     phone = Column(String)
-    telegram_tag = Column(String)
+    telegram_tag = Column(String, nullable=True)
     has_ticket = Column(Boolean, default=False)
     on_event = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
+    is_promoter = Column(Boolean, default=False)
+    promoter = Column(String, nullable=True)
 
 class Registration(Base):
     __tablename__ = 'registrations'
@@ -87,10 +88,12 @@ def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("promote", promote_user))
     dp.add_handler(CommandHandler("demote", demote_user))
+    dp.add_handler(CommandHandler("make_promoter", make_promoter))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
     dp.add_handler(MessageHandler(filters.Filters.text(["Сколько проверенных билетов", "Сколько регистраций"]), show_ticket_count))
+    dp.add_handler(MessageHandler(filters.Filters.text(["Мои приглашенные"]), show_invited_stats))
     return dp
 
 def is_admin(user_id):
@@ -100,25 +103,45 @@ def is_admin(user_id):
 def start(update: Update, context: CallbackContext):
     user = update.effective_user
     existing_user = get_user(user.id)
+
+    promoter_tag = None
+    if context.args:
+        promoter_tag = context.args[0].lstrip('@')
     
     if not existing_user:
         keyboard = [[KeyboardButton("Поделиться Номером", request_contact=True)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
+        session = Session()
+        new_user = User(
+            user_id=str(user.id),
+            telegram_tag=user.username if user.username else None,
+            has_ticket=False,
+            on_event=False,
+            is_admin=False,
+            is_promoter=False,
+            promoter=promoter_tag
+        )
+        session.add(new_user)
+        session.commit()
+        session.close()
+
         update.message.reply_text(
             "Регистрация:",
             reply_markup=reply_markup
         )
         return
     
+    buttons = []
     if existing_user.is_admin:
-        keyboard = [[KeyboardButton("Сколько проверенных билетов")], [KeyboardButton("Сколько регистраций")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        update.message.reply_text(
-            "Поздравляю ты контролер\n\n"
-            "Теперь можешь проверять QR-коды, просто отправляя их фото.\n"
-            "Используй кнопки ниже чтобы посмотреть статистику:",
-            reply_markup=reply_markup
-        )
+        buttons += [[KeyboardButton("Сколько проверенных билетов")], [KeyboardButton("Сколько регистраций")]]
+
+    if existing_user.is_promoter:
+        buttons += [[KeyboardButton("Мои приглашенные")]]
+
+    if buttons:
+        reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+        update.message.reply_text("Добро пожаловать! Используйте кнопки ниже:", reply_markup=reply_markup)
     else:
         channel_url = f"https://t.me/{CHANNEL_NAME}"
         keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
@@ -127,6 +150,71 @@ def start(update: Update, context: CallbackContext):
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
+def show_invited_stats(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+
+    if not user or not user.is_promoter:
+        update.message.reply_text("Ты не промоутер")
+        return
+
+    session = Session()
+    total_invited = session.query(User).filter_by(promoter=user.telegram_tag).count()
+    attended = session.query(User).join(Attendance, User.user_id == Attendance.user_id).filter(
+        User.promoter == user.telegram_tag
+    ).count()
+    session.close()
+
+    update.message.reply_text(f"Ты пригласил: {total_invited}\nНа событии были: {attended}")
+
+
+def make_promoter(update: Update, context: CallbackContext):
+    try:
+        sender_id = update.effective_user.id
+        sender = get_user(sender_id)
+        if not sender or not sender.is_admin:
+            update.message.reply_text("У вас нет прав для выполнения этой команды")
+            return
+
+        if not context.args or len(context.args) < 1:
+            update.message.reply_text("Использование: /make_promoter @username")
+            return
+
+        target_tag = context.args[0].lstrip('@')
+        session = Session()
+        target_user = session.query(User).filter(
+            func.lower(User.telegram_tag) == func.lower(target_tag)
+        ).first()
+
+        if not target_user:
+            update.message.reply_text("Пользователь не найден")
+            session.close()
+            return
+
+        if target_user.is_promoter:
+            update.message.reply_text("Этот пользователь уже промоутер")
+            session.close()
+            return
+
+        target_user.is_promoter = True
+        session.commit()
+        update.message.reply_text(f"Пользователь @{target_user.telegram_tag} теперь промоутер")
+
+        try:
+            context.bot.send_message(
+                chat_id=int(target_user.user_id),
+                text="Ты стал промоутером! Используй ссылку:\n"
+                     f"https://t.me/{context.bot.username}?start={target_user.telegram_tag}"
+            )
+        except Exception:
+            pass
+    except Exception:
+        update.message.reply_text("Ошибка выполнения команды")
+    finally:
+        if 'session' in locals():
+            session.close()
+
 
 def demote_user(update: Update, context: CallbackContext):
     try:
@@ -233,16 +321,23 @@ def handle_contact(update: Update, context: CallbackContext):
     phone = update.message.contact.phone_number
     
     session = Session()
-    new_user = User(
-        user_id=str(user.id),
-        phone=phone,
-        telegram_tag=user.username or user.full_name,
-        has_ticket=False,
-        on_event=False,
-        is_admin=False
-    )
-    session.add(new_user)
-    session.commit()
+    existing_user = session.query(User).filter_by(user_id=str(user.id)).first()
+    if existing_user:
+        existing_user.phone = phone
+        session.commit()
+    else:
+        new_user = User(
+            user_id=str(user.id),
+            phone=phone,
+            telegram_tag=user.username if user.username else None,
+            has_ticket=False,
+            on_event=False,
+            is_admin=False,
+            is_promoter=False,
+            promoter=None
+        )
+        session.add(new_user)
+        session.commit()
     session.close()
     
     update.message.reply_text(
