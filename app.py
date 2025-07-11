@@ -32,9 +32,19 @@ dotenv.load_dotenv()
 
 app = Flask(__name__)
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-SECURITY_CODE = os.getenv("SECURITY_CODE")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME")
 DATABASE_URL = os.getenv("DATABASE_URL")
+FREE_CODE = os.getenv("SECURITY_CODE")
+NEW_CODE = os.getenv("NEW_CODE")
+BACKSTAGE_CODE = os.getenv("BACKSTAGE_CODE")
+VIP_CODE = os.getenv("VIP_CODE")
+
+SECURITY_HASHES = {
+    "free": hashlib.sha256(FREE_CODE.encode()).hexdigest(),
+    "new": hashlib.sha256(NEW_CODE.encode()).hexdigest(),
+    "backstage": hashlib.sha256(BACKSTAGE_CODE.encode()).hexdigest(),
+    "vip": hashlib.sha256(VIP_CODE.encode()).hexdigest()
+}
 
 engine = create_engine(DATABASE_URL)
 Base = declarative_base()
@@ -64,6 +74,7 @@ class Attendance(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     user_id = Column(String)
     phone = Column(String)
+    ticket_type = Column(String)
 
 Base.metadata.create_all(engine)
 
@@ -90,6 +101,7 @@ def setup_dispatcher(dp):
     dp.add_handler(CommandHandler("demote", demote_user))
     dp.add_handler(CommandHandler("make_promoter", make_promoter))
     dp.add_handler(MessageHandler(filters.Filters.contact, handle_contact))
+    dp.add_handler(CallbackQueryHandler(handle_ticket_selection, pattern="^ticket_.+$"))
     dp.add_handler(CallbackQueryHandler(check_subscription, pattern="^check_subscription$"))
     dp.add_handler(MessageHandler(filters.Filters.photo, handle_photo))
     dp.add_handler(MessageHandler(filters.Filters.text(["Сколько проверенных билетов", "Сколько регистраций"]), show_ticket_count))
@@ -354,35 +366,16 @@ def check_subscription(update: Update, context: CallbackContext):
     try:
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
-            qr = QRCode()
-            qr_data = f"{user_id}:{hashlib.sha256(SECURITY_CODE.encode()).hexdigest()}"
-            qr.add_data(qr_data)
-            qr.make()
-
-            base_qr = qr.make_image(fill_color="black", back_color="white")
-            qr_img = base_qr.convert("RGB")
-            telegram_tag = query.from_user.username
-            ticket_img = generate_ticket_image(telegram_tag, qr_img)
-            bio = BytesIO()
-            ticket_img.save(bio, "PNG")
-            bio.seek(0)
-            
-            bot.send_photo(
-                chat_id=user_id,
-                photo=bio,
-                caption="Это твой билет на тусовку, сохрани, чтобы не потерять"
+            keyboard = [
+                [InlineKeyboardButton("Бесплатный - до 16:00", callback_data="ticket_free")],
+                [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
+                [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
+                [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
+            ]
+            query.edit_message_text(
+                "Выберите тип билета:",
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            
-            session = Session()
-            user = session.query(User).filter_by(user_id=str(user_id)).first()
-            registration = Registration(
-                user_id=str(user_id),
-                phone=user.phone
-            )
-            session.add(registration)
-            user.has_ticket = True
-            session.commit()
-            session.close()
         else:
             query.answer(
                 "Мы тебя не нашли(, попробуй еще раз", 
@@ -393,6 +386,54 @@ def check_subscription(update: Update, context: CallbackContext):
             "Мы тебя не нашли(, попробуй еще раз", 
             show_alert=True
         )
+
+def handle_ticket_selection(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    
+    user_id = query.from_user.id
+    ticket_type = query.data.split('_')[1]
+    
+    security_hash = SECURITY_HASHES.get(ticket_type)
+    if not security_hash:
+        query.edit_message_text("Ошибка: неверный тип билета")
+        return
+    
+    qr = QRCode()
+    qr_data = f"{user_id}:{security_hash}"
+    qr.add_data(qr_data)
+    qr.make()
+    
+    base_qr = qr.make_image(fill_color="black", back_color="white")
+    qr_img = base_qr.convert("RGB")
+    telegram_tag = query.from_user.username
+    
+    ticket_img = generate_ticket_image(telegram_tag, qr_img, ticket_type)
+    
+    bio = BytesIO()
+    ticket_img.save(bio, "PNG")
+    bio.seek(0)
+    
+    bot.send_photo(
+        chat_id=user_id,
+        photo=bio,
+        caption="Это твой билет на тусовку, сохрани, чтобы не потерять"
+    )
+    
+    session = Session()
+    user = session.query(User).filter_by(user_id=str(user_id)).first()
+    if user:
+        user.has_ticket = True
+        session.commit()
+    
+    registration = Registration(
+        user_id=str(user_id),
+        phone=user.phone
+    )
+    session.add(registration)
+    session.commit()
+    session.close()
+
 
 def handle_photo(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
@@ -420,7 +461,14 @@ def handle_photo(update: Update, context: CallbackContext):
             return
         
         uid, code = data.split(":")
-        if code != hashlib.sha256(SECURITY_CODE.encode()).hexdigest():
+        
+        ticket_type = None
+        for t_type, t_hash in SECURITY_HASHES.items():
+            if code == t_hash:
+                ticket_type = t_type
+                break
+        
+        if not ticket_type:
             update.message.reply_text("Левый код")
             return
         
@@ -439,13 +487,20 @@ def handle_photo(update: Update, context: CallbackContext):
         
         attendance = Attendance(
             user_id=uid,
-            phone=user.phone
+            phone=user.phone,
+            ticket_type=ticket_type
         )
         session.add(attendance)
         session.commit()
         session.close()
         
-        update.message.reply_text("Этот чист, пропускай")
+        type_names = {
+            "free": "Бесплатный",
+            "new": "Танцпол",
+            "backstage": "Бэкстейдж",
+            "vip": "VIP"
+        }
+        update.message.reply_text(f"Этот чист, пропускай. Тип билета: {type_names[ticket_type]}")
     except Exception as e:
         update.message.reply_text(f"Ошибка обработки: {str(e)}")
 
@@ -467,9 +522,17 @@ def show_ticket_count(update: Update, context: CallbackContext):
     
     update.message.reply_text(f"Всего: {count} {noun}")
 
-def generate_ticket_image(telegram_tag: str, qr_img: Image.Image):
+
+def generate_ticket_image(telegram_tag: str, qr_img: Image.Image, ticket_type: str):
+    image_map = {
+        "free": "img/free_ticket.png",
+        "new": "img/new_ticket.png",
+        "backstage": "img/backstage_ticket.png",
+        "vip": "img/vip_ticket.png"
+    }
+    
     try:
-        ticket = Image.open("img/ticket.png")
+        ticket = Image.open(image_map.get(ticket_type, "img/ticket.png"))
     except FileNotFoundError:
         ticket = Image.new('RGB', (1080, 1920), (255, 255, 255))
     
