@@ -367,7 +367,7 @@ def check_subscription(update: Update, context: CallbackContext):
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             keyboard = [
-                [InlineKeyboardButton("Бесплатный - до 16:00", callback_data="ticket_free")],
+                [InlineKeyboardButton("Бесплатный - до 18:00", callback_data="ticket_free")],
                 [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
                 [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
                 [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
@@ -546,7 +546,7 @@ def generate_ticket_image(telegram_tag: str, qr_img: Image.Image, ticket_type: s
     
     text_width = draw.textlength(tag_text, font=font)
     draw.text(
-        ((1080 - text_width) // 2, 940),
+        ((1080 - text_width) // 2, 950),
         tag_text,
         fill="white",
         font=font,
