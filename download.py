@@ -28,7 +28,7 @@ output_filename = 'data/users.csv'
 try:
     with conn.cursor() as cursor, open(output_filename, 'w') as csv_file:
         cursor.copy_expert(
-            "COPY (SELECT * FROM users) TO STDOUT WITH CSV HEADER",
+            '''COPY (select * from users) TO STDOUT WITH CSV HEADER''',
             csv_file
         )
     print(f"Successfully exported to {output_filename}")

@@ -9,3 +9,6 @@ gunicorn
 onnxruntime
 sqlalchemy
 psycopg2-binary
+seaborn
+pandas
+matplotlib

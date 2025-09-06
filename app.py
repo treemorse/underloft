@@ -35,15 +35,15 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_NAME = os.getenv("CHANNEL_NAME")
 DATABASE_URL = os.getenv("DATABASE_URL")
 FREE_CODE = os.getenv("SECURITY_CODE")
-NEW_CODE = os.getenv("NEW_CODE")
-BACKSTAGE_CODE = os.getenv("BACKSTAGE_CODE")
-VIP_CODE = os.getenv("VIP_CODE")
+# NEW_CODE = os.getenv("NEW_CODE")
+# BACKSTAGE_CODE = os.getenv("BACKSTAGE_CODE")
+# VIP_CODE = os.getenv("VIP_CODE")
 
 SECURITY_HASHES = {
-    "free": hashlib.sha256(FREE_CODE.encode()).hexdigest(),
-    "new": hashlib.sha256(NEW_CODE.encode()).hexdigest(),
-    "backstage": hashlib.sha256(BACKSTAGE_CODE.encode()).hexdigest(),
-    "vip": hashlib.sha256(VIP_CODE.encode()).hexdigest()
+    "free": hashlib.sha256(FREE_CODE.encode()).hexdigest()
+    # "new": hashlib.sha256(NEW_CODE.encode()).hexdigest(),
+    # "backstage": hashlib.sha256(BACKSTAGE_CODE.encode()).hexdigest(),
+    # "vip": hashlib.sha256(VIP_CODE.encode()).hexdigest()
 }
 
 engine = create_engine(DATABASE_URL)
@@ -367,9 +367,10 @@ def check_subscription(update: Update, context: CallbackContext):
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             keyboard = [
-                [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
-                [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
-                [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
+                [InlineKeyboardButton("Бесплатная Проходка", callback_data="ticket_free")],
+                # [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
+                # [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
+                # [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
             ]
             query.edit_message_text(
                 "Выберите тип билета:",
@@ -578,4 +579,3 @@ def webhook():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=1612)
-
