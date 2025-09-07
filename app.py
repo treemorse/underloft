@@ -417,7 +417,7 @@ def handle_ticket_selection(update: Update, context: CallbackContext):
     bot.send_photo(
         chat_id=user_id,
         photo=bio,
-        caption="Это твой билет на **UNDR DACHA**! Сохрани, чтобы не потерять"
+        caption="Это твой билет на **UNDR DACHA**! Сохрани, чтобы не потерять",
         parse_mode='Markdown'
     )
     
