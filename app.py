@@ -367,7 +367,7 @@ def check_subscription(update: Update, context: CallbackContext):
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             keyboard = [
-                [InlineKeyboardButton("Бесплатная Проходка", callback_data="ticket_free")],
+                [InlineKeyboardButton("🎟️БЕСПЛАТНАЯ ПРОХОДКА🎟️", callback_data="ticket_free")],
                 # [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
                 # [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
                 # [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
@@ -417,7 +417,8 @@ def handle_ticket_selection(update: Update, context: CallbackContext):
     bot.send_photo(
         chat_id=user_id,
         photo=bio,
-        caption="Это твой билет на тусовку, сохрани, чтобы не потерять"
+        caption="Это твой билет на *UNDR DACHA*! Сохрани, чтобы не потерять"
+        parse_mode='MarkdownV2'
     )
     
     session = Session()
