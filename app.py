@@ -367,9 +367,7 @@ def check_subscription(update: Update, context: CallbackContext):
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
             query.edit_message_text(
-                '''Бесплатные проходки закончились :( \n\
-                НО очень скоро мы анонсируем розыгрыш❗️ \n\
-                До встречи на тусовке! Команда UNDR'''
+                "Бесплатные проходки закончились :(\nНО очень скоро мы анонсируем розыгрыш❗️\nДо встречи на тусовке! Команда UNDR"
             )
             # keyboard = [
             #     [InlineKeyboardButton("🎟️БЕСПЛАТНАЯ ПРОХОДКА🎟️", callback_data="ticket_free")],
