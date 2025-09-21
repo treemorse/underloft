@@ -380,7 +380,7 @@ def check_subscription(update: Update, context: CallbackContext):
                 )
             else:
                 query.edit_message_text(
-                    f"Бесплатные проходки закончились :(\nНО очень скоро мы анонсируем розыгрыш❗️\nДо встречи на тусовке! Команда UNDR{user.promoter}"
+                    f"Бесплатные проходки закончились :(\nНО очень скоро мы анонсируем розыгрыш❗️\nДо встречи на тусовке! Команда UNDR"
                 )
         else:
             query.answer(
