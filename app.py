@@ -120,48 +120,54 @@ def start(update: Update, context: CallbackContext):
     if context.args:
         promoter_tag = context.args[0].lstrip('@')
     
-    if not existing_user:
-        keyboard = [[KeyboardButton("Поделиться Номером", request_contact=True)]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    # If user exists, check if we need to update their promoter info
+    if existing_user:
+        # Update promoter if provided and user doesn't have one yet
+        if promoter_tag and not existing_user.promoter:
+            update_user(user.id, {'promoter': promoter_tag})
+        
+        buttons = []
+        if existing_user.is_admin:
+            buttons += [[KeyboardButton("Сколько проверенных билетов")], [KeyboardButton("Сколько регистраций")]]
 
-        session = Session()
-        new_user = User(
-            user_id=str(user.id),
-            telegram_tag=user.username if user.username else None,
-            has_ticket=False,
-            on_event=False,
-            is_admin=False,
-            is_promoter=False,
-            promoter=promoter_tag
-        )
-        session.add(new_user)
-        session.commit()
-        session.close()
+        if existing_user.is_promoter:
+            buttons += [[KeyboardButton("Мои приглашенные")]]
 
-        update.message.reply_text(
-            "Регистрация:",
-            reply_markup=reply_markup
-        )
+        if buttons:
+            reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+            update.message.reply_text("Добро пожаловать! Используйте кнопки ниже:", reply_markup=reply_markup)
+        else:
+            channel_url = f"https://t.me/{CHANNEL_NAME}"
+            keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
+            update.message.reply_text(
+                f"Подпишись на [канал]({channel_url}), чтобы получить билет",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         return
     
-    buttons = []
-    if existing_user.is_admin:
-        buttons += [[KeyboardButton("Сколько проверенных билетов")], [KeyboardButton("Сколько регистраций")]]
+    # For new users
+    keyboard = [[KeyboardButton("Поделиться Номером", request_contact=True)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-    if existing_user.is_promoter:
-        buttons += [[KeyboardButton("Мои приглашенные")]]
+    session = Session()
+    new_user = User(
+        user_id=str(user.id),
+        telegram_tag=user.username if user.username else None,
+        has_ticket=False,
+        on_event=False,
+        is_admin=False,
+        is_promoter=False,
+        promoter=promoter_tag  # This will be set for new users
+    )
+    session.add(new_user)
+    session.commit()
+    session.close()
 
-    if buttons:
-        reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
-        update.message.reply_text("Добро пожаловать! Используйте кнопки ниже:", reply_markup=reply_markup)
-    else:
-        channel_url = f"https://t.me/{CHANNEL_NAME}"
-        keyboard = [[InlineKeyboardButton("Проверить", callback_data="check_subscription")]]
-        update.message.reply_text(
-            f"Подпишись на [канал]({channel_url}), чтобы получить билет",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    update.message.reply_text(
+        "Регистрация:",
+        reply_markup=reply_markup
+    )
 
 def show_invited_stats(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -367,7 +373,7 @@ def check_subscription(update: Update, context: CallbackContext):
     try:
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
-            if user.promoter in ["vsh", "nlg"]:
+            if user.promoter in ["zonedberg"]:
                 keyboard = [
                     [InlineKeyboardButton("🎟️БЕСПЛАТНАЯ ПРОХОДКА🎟️", callback_data="ticket_free")],
                     # [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
