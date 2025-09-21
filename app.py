@@ -363,22 +363,25 @@ def check_subscription(update: Update, context: CallbackContext):
     query.answer()
     
     user_id = query.from_user.id
+    user = get_user(user_id)
     try:
         member = bot.get_chat_member(f"@{CHANNEL_NAME}", user_id)
         if member.status in ["member", "administrator", "creator"]:
-            query.edit_message_text(
-                "Бесплатные проходки закончились :(\nНО очень скоро мы анонсируем розыгрыш❗️\nДо встречи на тусовке! Команда UNDR"
-            )
-            # keyboard = [
-            #     [InlineKeyboardButton("🎟️БЕСПЛАТНАЯ ПРОХОДКА🎟️", callback_data="ticket_free")],
-            #     # [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
-            #     # [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
-            #     # [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
-            # ]
-            # query.edit_message_text(
-            #     "Выберите тип билета:",
-            #     reply_markup=InlineKeyboardMarkup(keyboard)
-            # )
+            if user.promoter in ["vsh", "nlg"]:
+                keyboard = [
+                    [InlineKeyboardButton("🎟️БЕСПЛАТНАЯ ПРОХОДКА🎟️", callback_data="ticket_free")],
+                    # [InlineKeyboardButton("Танцпол - 700 рублей", callback_data="ticket_new")],
+                    # [InlineKeyboardButton("Бэкстейдж - 1500 рублей", callback_data="ticket_backstage")],
+                    # [InlineKeyboardButton("VIP - 5000 рублей", callback_data="ticket_vip")]
+                ]
+                query.edit_message_text(
+                    "Выберите тип билета:",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                query.edit_message_text(
+                    "Бесплатные проходки закончились :(\nНО очень скоро мы анонсируем розыгрыш❗️\nДо встречи на тусовке! Команда UNDR"
+                )
         else:
             query.answer(
                 "Мы тебя не нашли(, попробуй еще раз", 
