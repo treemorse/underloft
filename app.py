@@ -381,9 +381,9 @@ def check_subscription(update: Update, context: CallbackContext):
                     bot.send_photo(
                         chat_id=user_id,
                         photo=photo,
-                        caption="Спасибо за регистрацию! Забирай бесплатный шот на ближайшем ивенте."
+                        caption="Забирай бесплатный шот на ближайшем ивенте."
                     )
-                query.edit_message_text("Отлично! Ты подписан на канал. Проверяй свой документ выше!")
+                query.edit_message_text("Отлично! Ты подписан на канал.")
             except FileNotFoundError:
                 query.edit_message_text("Регистрация завершена! Изображение временно недоступно.")
         else:
